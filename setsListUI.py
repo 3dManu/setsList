@@ -5,7 +5,6 @@ import time
 import sys,os
 
 try:
-	# Check import PySide
 	from PySide.QtCore import *
 	from PySide.QtDeclarative import *
 	from PySide.QtGui import *
@@ -26,7 +25,6 @@ try:
 	from shiboken import wrapInstance
 except ImportError:
 	try:
-		# Check import PySide2
 		from PySide2.QtCore import *
 		from PySide2.QtGui import *
 		from PySide2.QtHelp import *
@@ -50,7 +48,6 @@ except ImportError:
 		from PySide2.QtXmlPatterns import *
 		from shiboken2 import wrapInstance
 	except ImportError:
-		# Failed import to PySide and PySide2.
 		raise ImportError('No module named PySide and PySide2.')
 		
 import maya.OpenMayaUI as OpenMayaUI
@@ -170,9 +167,7 @@ class editSetName(QWidget):
 		self.layout.addWidget(self.aplyBtn)
 		
 		self.setLayout(self.layout)
- 
-	#----------------------------------------
-	## UI要素のステータスやら値やらプリントする
+		
 	def applySetName(self):
 		self.close()
 		self.parent.editWindowTitle(self.lineEdit.text())
@@ -190,7 +185,7 @@ class SetsListUI(QWidget):
 	def initUI(self):
 		self.cnt = 0
 		self.dockUI = []
-		self.callbackID = OpenMaya.MNodeMessage.addNameChangedCallback(OpenMaya.MObject(), self.nameIsChanged)#リネーム時に処理が走る
+		self.callbackID = OpenMaya.MNodeMessage.addNameChangedCallback(OpenMaya.MObject(), self.nameIsChanged)
 		self.listModel = listViewModel()
 		self.jobNo = [None,None,None]
 		
@@ -346,7 +341,6 @@ class SetsListUI(QWidget):
 			listModel.setDataWithoutRename(index,newName,Qt.EditRole)
 	
 	def selectionLists(self):
-		start = time.time()
 		currentDock = ListField.currentDock 
 		if currentDock != None:
 			listView = currentDock.listView
@@ -359,8 +353,6 @@ class SetsListUI(QWidget):
 				if item:
 					index = listModel.indexFromItem(item[0])
 					selModel.select(index,QItemSelectionModel.Select)
-		elapsed_time = time.time() - start
-		print ("elapsed_time:{0}".format(elapsed_time) + "[sec]")
 	
 	def deletedObject(self):
 		listA = []
@@ -460,7 +452,6 @@ class SetsListUI(QWidget):
 		setName = listView.accessibleName()
 		data = setsListWidget.addObj(setName)
 		curNo = listView.parentWidget().myNo
-		#すでにmodelにあるものだった場合リストにshowする
 		chks = self.appendItemModel(data,curNo)
 		for chk in chks:
 			if chk:
@@ -500,7 +491,6 @@ class SetsListUI(QWidget):
 		
 	#====================================================
 	#====================================================
-	#addItemをしたときに全てのリストに表示されるので表示しなくて良いリストを判別してhideをかける
 	
 	def appendItemModel(self,data,curID = None):
 		listModel = self.listModel
