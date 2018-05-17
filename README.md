@@ -1,0 +1,2 @@
+# setsList
+Mayaシーン内のsetをリストアップするツール
