@@ -1,6 +1,10 @@
 # setsList
 Mayaシーン内のsetをリストアップするツール
 
+
+ダウンロードは右上の緑色のClone or downloadのdownload for zipからできると思います。
+
+
 起動コマンドは、setsListのフォルダ事maya>scriptの中に入れて
 
 from setsList import setsListUI
