@@ -2,7 +2,7 @@
 Mayaシーン内のsetをリストアップするツール
 
 
-ダウンロードは右上の緑色のClone or downloadのdownload for zipからできると思います。
+ダウンロードは右上の緑色のClone or downloadのDownload zipからできると思います。
 
 
 起動コマンドは、setsListのフォルダ事maya>scriptの中に入れて
