@@ -31,6 +31,7 @@ def objExtract(set):
 	stop_undo()
 	nullSet = cmds.sets(em=True,name="nullSet")
 	objs = cmds.sets(set,un = nullSet)
+	objs = cmds.ls(objs,fl=True)
 	cmds.delete(nullSet)
 	start_undo()
 	
@@ -43,9 +44,21 @@ def selectAll(set):
 	
 
 def addObj(set):
-	getObj = cmds.ls(sl=True)
+	getObj = cmds.ls(sl=True,fl=True)
 	cmds.sets(getObj,e=True,fe=set)
 	return getObj
+
+def getComponents(meshPlug):
+	print meshPlug
+	components = None
+	cmpList = []
+	if meshPlug.rsplit(".")[-1].startswith("objectGrpColor"):
+		components = cmds.getAttr("%s.objectGrpCompList"%meshPlug.rsplit(".",1)[0])
+		for cmp in components:
+			cmpList.append("%s.%s"%(meshPlug.split(".")[0],cmp))
+		components = cmds.ls(cmpList,fl=True)
+		return components
+	return mesh
 
 def removeObj(set,objs):
 	cmds.sets(objs,e=True,rm=set)
@@ -63,7 +76,7 @@ def selectObjs(objs):
 	cmds.select(objs,r=True)
 
 def selectLists():
-	names = cmds.ls(sl=True)
+	names = cmds.ls(sl=True,fl=True)
 	return names
 
 def addSetTab():

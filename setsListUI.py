@@ -87,13 +87,8 @@ class ItemView(QListView):
 		return indexes
 		
 	def removeSelectedItem(self):
-		listModel = self.listModel
-		selModel = self.selectionModel()
-		indexes = selModel.selectedIndexes()
-		items =[]		
-		for index in indexes:
-			items.append(self.listModel.data(index))
-		
+		listModel = self.listModel		
+		items = self.selectionListItems()
 		setsListWidget.deleteSet(items)
 				 
 	def keyPressEvent(self, event):
@@ -105,12 +100,17 @@ class ItemView(QListView):
 	
 	def mouseReleaseEvent(self, event):
 		QListView.mouseReleaseEvent(self, event)
+		items = self.selectionListItems()
+		setsListWidget.selectObjs(items)
+		
+	def selectionListItems(self):
 		selModel = self.selectionModel()
 		indexes = selModel.selectedIndexes()
 		items = []
 		for index in indexes:
 			items.append(self.listModel.data(index))
-		setsListWidget.selectObjs(items)
+		return items
+		
 
 class ListField(QDockWidget):
 	instID = []
@@ -128,9 +128,10 @@ class ListField(QDockWidget):
 	
 	def selListWidget(self,chk):
 		sender = self.sender()
-		if chk:
-			ListField.currentDock = sender
-			self.listView.setFocus()
+		if not chk:
+			return
+		ListField.currentDock = sender
+		self.listView.setFocus()
 	
 	def closeEvent(self, event):
 		ListField.instID.remove(self.myNo)
@@ -185,11 +186,10 @@ class SetsListUI(QWidget):
 	def initUI(self):
 		self.cnt = 0
 		self.dockUI = []
-		self.callbackID = OpenMaya.MNodeMessage.addNameChangedCallback(OpenMaya.MObject(), self.nameIsChanged)
+		self.callbackIDs = {}
 		self.listModel = listViewModel()
 		self.jobNo = [None,None,None]
 		
-		#button
 		self.hilgtBtn = QToolButton(self)
 		self.allReBtn = QToolButton(self)
 		self.newSetBtn = QToolButton(self)
@@ -199,7 +199,6 @@ class SetsListUI(QWidget):
 		
 		self.reNameBtn = QPushButton(self)
 		
-		#topButton---------
 		self.hilgtBtn.setText("Hi")
 		self.allReBtn.setText("Re")
 		self.newSetBtn.setText("New")
@@ -207,7 +206,6 @@ class SetsListUI(QWidget):
 		self.addSetBtn.setText("Add")
 		self.remSetBtn.setText("Rem")
 		self.reNameBtn.setText("renameSet")
-		#-------------------
 		
 		self.hilgtBtn.setCheckable(True)
 		self.hilgtBtn.toggled.connect(self.hiliteList)
@@ -221,12 +219,10 @@ class SetsListUI(QWidget):
 		
 		self.reNameBtn.clicked.connect(self.renameSetWindow)
 		
-		#botButton---------
 		self.addItemBtn = QPushButton("Add",self)
 		self.remItemBtn = QPushButton("Remove",self)
 		self.selItemBtn = QPushButton("Select All",self)
 		self.clrItemBtn = QPushButton("Clear",self)
-		#-------------------
 		
 		self.addItemBtn.clicked.connect(self.addItem)
 		self.remItemBtn.clicked.connect(self.removeItem)
@@ -243,7 +239,6 @@ class SetsListUI(QWidget):
 		self.tabMain.setWindowFlags(Qt.Widget)
 		self.tabMain.setTabPosition(Qt.TopDockWidgetArea,QTabWidget.North)
 		
-		#design
 		self.addItemBtn.setFixedWidth(60)
 		self.remItemBtn.setFixedWidth(60)
 		self.selItemBtn.setFixedWidth(60)
@@ -252,7 +247,6 @@ class SetsListUI(QWidget):
 		self.objRadio.setFixedWidth(70)
 		self.shdRadio.setFixedWidth(90)
 		
-		#layout
 		self.vLay = QVBoxLayout()
 		self.hTopLay = QHBoxLayout()
 		self.hTabEditLay = QHBoxLayout()
@@ -287,16 +281,22 @@ class SetsListUI(QWidget):
 		self.vLay.addLayout(self.hBotLay)
 		
 		self.setLayout(self.vLay)
-		#-----
 		
 		self.buildTabs()
 		self.listModel.sort(0,Qt.AscendingOrder)
-		self.createScriptJobs()
 		self.show()
 	
 	def closeEvent(self, e):
-		self.deleteScriptJobs()
-		OpenMaya.MNodeMessage.removeCallback(self.callbackID)
+		for no in self.jobNo:
+			try:
+				setsListWidget.delScriptJobs(no)
+			except:
+				pass
+		for id in self.callbackIDs.items():
+			try:
+				OpenMaya.MMessage.removeCallback(id[1])
+			except:
+				pass
 	
 	def addDocks(self,title,data,fstDock=None):
 		dock = ListField(self.cnt,self,title,data,self.listModel)
@@ -317,19 +317,19 @@ class SetsListUI(QWidget):
 			self.dockUI.append(self.addDocks(tabName,list))
 	
 	def buildTabs(self):
+		self.callbackIDs["__callBack.NameChenged"] = OpenMaya.MNodeMessage.addNameChangedCallback(OpenMaya.MObject(), self.nameIsChanged)
+		self.callbackIDs["__callBack.Connection"] = OpenMaya.MDGMessage.addConnectionCallback(self.checkConnectedPlug)
+		
 		tabNames = setsListWidget.setsExtract(self.objRadio.isChecked())
 		for tabName in tabNames:
 			list = setsListWidget.objExtract(tabName)
 			self.addTab(tabName,list)
-		
-	def createScriptJobs(self):
-		self.jobNo[1] = setsListWidget.addScriptJobs(self.deletedObject,"delete")
-		self.jobNo[2] = setsListWidget.addScriptJobs(self.changedRenderLayer,"changerl")
-	
-	def deleteScriptJobs(self):
-		setsListWidget.delScriptJobs(self.jobNo[0])
-		setsListWidget.delScriptJobs(self.jobNo[1])
-		setsListWidget.delScriptJobs(self.jobNo[2])
+			for item in list:
+				meshName = item.split(".")
+				if len(meshName)<=1:
+					continue
+				meshName = meshName[0]
+				self.callbackIDs["_%s.%s"%(meshName,tabName)] = self.setAttributeCallback(meshName,tabName)
 
 	def nameIsChanged(self,node, prevName, clientData):
 		listModel = self.listModel
@@ -342,17 +342,19 @@ class SetsListUI(QWidget):
 	
 	def selectionLists(self):
 		currentDock = ListField.currentDock 
-		if currentDock != None:
-			listView = currentDock.listView
-			listModel = self.listModel
-			objs = setsListWidget.selectLists()
-			selModel = listView.selectionModel()
-			selModel.clear()
-			for obj in objs:
-				item = listModel.findItems(obj)
-				if item:
-					index = listModel.indexFromItem(item[0])
-					selModel.select(index,QItemSelectionModel.Select)
+		if currentDock == None:
+			return
+		listView = currentDock.listView
+		listModel = self.listModel
+		objs = setsListWidget.selectLists()
+		selModel = listView.selectionModel()
+		selModel.clear()
+		for obj in objs:
+			item = listModel.findItems(obj)
+			if not item:
+				continue
+			index = listModel.indexFromItem(item[0])
+			selModel.select(index,QItemSelectionModel.Select)
 	
 	def deletedObject(self):
 		listA = []
@@ -381,8 +383,115 @@ class SetsListUI(QWidget):
 		if self.shdRadio.isChecked():
 			self.reloadAllList()
 			
-	#====================================================
-	#=============bottom Button Command==================
+	def checkConnectedPlug(self,srcPlug,destPlug,made,clintData):
+		srcName = OpenMaya.MFnDependencyNode(srcPlug.node()).name()
+		destName = OpenMaya.MFnDependencyNode(destPlug.node()).name()
+		srcType = OpenMaya.MFnDependencyNode(srcPlug.node()).typeName()
+		destType = OpenMaya.MFnDependencyNode(destPlug.node()).typeName()
+		dpName = destPlug.name()
+		spName = srcPlug.name()
+		listModel = self.listModel
+		chk = False
+		components = False
+		
+		if self.objRadio.isChecked() and destType == "objectSet" and dpName.split(".")[1].startswith("dagSetMembers"):
+			textPlug = OpenMaya.MFnDependencyNode(destPlug.node()).findPlug("annotation",False).asString()
+			if textPlug == "manuListViewSet":
+				chk = True
+		elif self.shdRadio.isChecked() and destType == "shadingEngine" and dpName.startswith("dagSetMembers"):
+			chk = True
+		
+		if srcType == "mesh" and len(spName.split(".")) > 2:
+			chk = False
+			
+		if srcType == "objectSet" and destType == "mesh":
+			textPlug = OpenMaya.MFnDependencyNode(srcPlug.node()).findPlug("annotation",False).asString()
+			if textPlug == "manuListViewSet":
+				chk = made
+				components = True
+		
+		if chk and not made:
+			for dock in self.dockUI:
+				if destName == dock.listView.accessibleName():
+					break
+			listView = dock.listView
+			row = listView.findRows([srcName])
+			if row:
+				listView.setRowHidden(row[0],True)
+		elif chk and made:
+			if components:
+				cmpName = setsListWidget.getComponents(dpName)
+				self.connectionItem(srcName,cmpName)
+				self.callbackIDs["_%s.%s"%(destName,srcName)] = self.setAttributeCallback(destName,srcName)
+				
+			else:
+				self.connectionItem(destName,[srcName])
+	
+	def setAttributeCallback(self,name,setName):
+		for idName in self.callbackIDs.items():
+			if idName[0] == "_%s.%s"%(name,setName):
+				try:
+					OpenMaya.MMessage.removeCallback(idName[1])
+				except:
+					pass
+		selectionlist = OpenMaya.MSelectionList()
+		mobject = OpenMaya.MObject()
+		selectionlist.add(setName)
+		selectionlist.getDependNode(0, mobject)
+		id = OpenMaya.MObjectSetMessage.addSetMembersModifiedCallback(mobject,self.checkChangedAttribute,name)
+		return id
+	
+	def checkChangedAttribute(self ,node, mesh = None):
+		setName = OpenMaya.MFnDependencyNode(node).name()
+		dockNames = {}
+		for dock in self.dockUI:
+			if setName == dock.listView.accessibleName():
+				listView = dock.listView
+		
+		listModel = self.listModel
+		matchedList = {}
+		addObjs = []
+		delObjs = []
+		
+		setA = []
+		setB = []
+		
+		row = listModel.rowCount()
+		for i in range(row):
+			if not listView.isRowHidden(i):
+				setA.append(listModel.item(i).text())
+			
+		setB = setsListWidget.objExtract(setName)
+			
+		addObjs = list(filter(lambda x: x not in setA,setB))
+		delObjs = list(filter(lambda x: x not in setB,setA))
+		
+		if addObjs:
+			self.connectionItem(setName,addObjs)
+		
+		if delObjs:
+			rows = listView.findRows(delObjs)
+			for row in rows:
+				listView.setRowHidden(row,True)
+	
+	def connectionItem(self,setName,data):
+		if setName == None:
+			listView = self.tabMain.focusWidget()
+			setName = listView.accessibleName()
+		else:
+			for dock in self.dockUI:
+				if setName == dock.listView.accessibleName():
+					break
+			listView = dock.listView
+		
+		curNo = listView.parentWidget().myNo
+		chks = self.appendItemModel(data,curNo)
+		rows = listView.findRows(data)
+		for chk,row in zip(chks,rows):
+			if not chk:
+				continue
+			listView.setRowHidden(row,False)
+			
 	def hiliteList(self,chk):
 		if chk:
 			self.jobNo[0] = setsListWidget.addScriptJobs(self.selectionLists,"selection")
@@ -390,6 +499,12 @@ class SetsListUI(QWidget):
 			setsListWidget.delScriptJobs(self.jobNo[0])
 			
 	def reloadAllList(self):
+		for id in self.callbackIDs.items():
+			try:
+				OpenMaya.MMessage.removeCallback(id[1])
+			except:
+				pass
+	
 		for dock in self.dockUI:
 			dock.close()
 		self.cnt = 0
@@ -397,20 +512,22 @@ class SetsListUI(QWidget):
 		
 		self.buildTabs()
 	
-	def renameSetWindow(self):
+	def listViewAndSetName(self):
 		listView = self.tabMain.focusWidget()
 		setName = listView.accessibleName()
+		return listView,setName
+	
+	def renameSetWindow(self):
+		listView,setName = self.listViewAndSetName()
 		editWindow = editSetName(setName,self)
 		editWindow.show()
 	
 	def editWindowTitle(self,name):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		listView,setName = self.listViewAndSetName()
 		newName = setsListWidget.renameItem(setName,name)
 		listView.setAccessibleName(newName)
 		listView.parentWidget().setWindowTitle(newName)
 		
-	#------------------------------------------------------
 	
 	def newSet(self):
 		tabName = "setList" + str(self.cnt)
@@ -425,43 +542,38 @@ class SetsListUI(QWidget):
 		if not tabNames:
 			return
 		for tabName in tabNames:
-			if tabName not in setNames:
-				list = setsListWidget.objExtract(tabName)
-				self.addTab(tabName,list)
+			if tabName in setNames:
+				continue
+			list = setsListWidget.objExtract(tabName)
+			self.addTab(tabName,list)
+			for item in list:
+				meshName = item.split(".")
+				if len(meshName)<=1:
+					continue
+				meshName = meshName[0]
+				self.callbackIDs["_%s.%s"%(meshName,tabName)] = self.setAttributeCallback(meshName,tabName)
 				
 	def delSet(self):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		listView,setName = self.listViewAndSetName()
 		setsListWidget.deleteSet(setName)
 		dock = listView.parentWidget()
 		dock.close()
 		self.dockUI.remove(dock)
 	
 	def remSet(self):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		listView,setName = self.listViewAndSetName()
 		setsListWidget.removeSet(setName)
 		dock = listView.parentWidget()
 		dock.close()
 		self.dockUI.remove(dock)
 		
-	#------------------------------------------------------
 	
 	def addItem(self):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		_,setName = self.listViewAndSetName()
 		data = setsListWidget.addObj(setName)
-		curNo = listView.parentWidget().myNo
-		chks = self.appendItemModel(data,curNo)
-		for chk in chks:
-			if chk:
-				rows = listView.findRows(data)
-				for row in rows:
-					listView.setRowHidden(row,False)
 	
 	def removeItem(self):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		listView,setName = self.listViewAndSetName()
 		model = listView.model()
 		selModel = listView.selectionModel()
 		items = []
@@ -470,45 +582,44 @@ class SetsListUI(QWidget):
 		for index in indexes:
 			items.append(model.data(index))
 			listView.setRowHidden(index.row(),True)
-			
 		setsListWidget.removeObj(setName,items)
 		
 	def selectAllItem(self):
+		setsListWidget.delScriptJobs(self.jobNo[0])
 		listView = self.tabMain.focusWidget()
 		curNo = listView.parentWidget().myNo
 		setName = listView.accessibleName()
 		objs = setsListWidget.selectAll(setName)
 		listView.selectAll()
+		self.jobNo[0] = setsListWidget.addScriptJobs(self.selectionLists,"selection")
 				
 	def clearItem(self):
-		listView = self.tabMain.focusWidget()
-		setName = listView.accessibleName()
+		listView,setName = self.listViewAndSetName()
 		setsListWidget.clearSet(setName)
 		listModel = self.listModel
 		row = listModel.rowCount()
 		for i in range(row):
 			listView.setRowHidden(i,True)
-		
-	#====================================================
-	#====================================================
 	
 	def appendItemModel(self,data,curID = None):
 		listModel = self.listModel
 		instID = ListField.instID
-		chk = []
-		if data:
-			for node in data:
-				item = listModel.findItems(node)
-				if not item:
-					listModel.appendRow(QStandardItem(node))
-					for id in instID:
-						if id != curID:
-							row = listModel.rowCount()
-							self.dockUI[id].listView.setRowHidden((row-1),True)
-					chk.append(False)
-				else:
-					chk.append(True)
-		return chk
+		chks = []
+		if not data:
+			return chks
+		for node in data:
+			item = listModel.findItems(node)
+			if item:
+				chks.append(True)
+			else:
+				listModel.appendRow(QStandardItem(node))
+				for id in instID:
+					if id == curID:
+						continue
+					row = listModel.rowCount()
+					self.dockUI[id].listView.setRowHidden((row-1),True)
+				chks.append(False)
+		return chks
 		
 def main():
 	app = QApplication.instance()
